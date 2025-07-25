@@ -348,6 +348,15 @@ const toolLogContainer = document.getElementById('tool-log-container');
    lastRequestTime: 0,
    rateLimit: 5000, // Default 5 seconds
 
+    async _restartSessionWithHistory(history = []) {
+        console.log('Restarting session with history preservation...');
+        await this.startOrRestartChatSession(); // This creates a new session with the latest model from the UI
+        if (this.chatSession) {
+            this.chatSession.history = history;
+            console.log(`Session re-initialized with ${history.length} history parts.`);
+        }
+    },
+
     initialize() {
       // This will be called to start a new chat session
     },
@@ -928,21 +937,13 @@ Always format your responses using Markdown, and cite your sources.`;
     },
 
     async sendMessage() {
+      // --- Model and History Management ---
       const selectedModel = modelSelector.value;
-
-      // --- Check for Model Change and RESTART Session ---
-      if (this.chatSession && this.activeModelName !== selectedModel) {
-        console.log(`Model changed from '${this.activeModelName}' to '${selectedModel}'. Re-initializing session while preserving history.`);
-        
-        // Preserve history, restart the session, and then inject the history back.
-        const history = await this.chatSession.getHistory();
-        await this.startOrRestartChatSession(); // This will create a new session with the new model
-        if(this.chatSession) {
-          this.chatSession.history = history;
-          console.log('Session re-initialized and history preserved.');
-        }
+      if (!this.chatSession || this.activeModelName !== selectedModel) {
+        let historyToPreserve = this.chatSession ? await this.chatSession.getHistory() : [];
+        await this._restartSessionWithHistory(historyToPreserve);
       }
-      // --- End of Model Change Check ---
+      // --- End of Model and History Management ---
 
      const now = Date.now();
      const timeSinceLastRequest = now - this.lastRequestTime;
@@ -1053,26 +1054,16 @@ Always format your responses using Markdown, and cite your sources.`;
             } else {
                const delay = this.rateLimit;
                this.appendMessage(
-                   `API key failed. Waiting for ${Math.ceil(delay / 1000)}s before retrying with the next key...`,
+                   `API key failed. Waiting for ${Math.ceil(delay / 1000)}s before retrying...`,
                    'ai',
                );
                await new Promise(resolve => setTimeout(resolve, delay));
               
-               const newApiKey = ApiKeyManager.getCurrentKey();
-               if (newApiKey) {
-                   console.groupCollapsed('[AI Turn] Rotating API Key');
-                   console.log(`New API Key Index: ${ApiKeyManager.currentIndex}`);
-                   console.log(`Using cached model name: ${modelName} (type: ${typeof modelName})`);
-                   
-                   const genAI = new window.GoogleGenerativeAI(newApiKey);
-                   // Always read the latest model value from the DOM to avoid using a stale one
-                   const currentModel = modelSelector.value;
-                   console.log(`[Retry] Updating chat session with new API key and model:`, currentModel, `(type: ${typeof currentModel})`);
-                   this.chatSession.model = genAI.getGenerativeModel({ model: currentModel });
-                   this.activeModelName = currentModel; // IMPORTANT: Keep our state tracker in sync
-                   console.log('API key and model updated in existing chat session.');
-                   console.groupEnd();
-               }
+               // UNIFIED LOGIC: On key rotation, just restart the session completely.
+               // It will pick up the new key and the latest model from the UI.
+               console.log('[AI Turn] Restarting session due to API key failure.');
+               const history = this.chatSession ? await this.chatSession.getHistory() : [];
+               await this._restartSessionWithHistory(history);
               
                // The loop will automatically retry with the same `promptParts`
                this.lastRequestTime = Date.now(); // Reset timer after waiting
