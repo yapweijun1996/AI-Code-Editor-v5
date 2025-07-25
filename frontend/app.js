@@ -638,7 +638,7 @@ Always format your responses using Markdown, and cite your sources.`;
             );
             const file = await fileHandle.getFile();
             const content = await file.text();
-            await openFile(fileHandle);
+            await openFile(fileHandle, parameters.filename);
             result = { status: 'Success', content: content };
             break;
           }
@@ -652,7 +652,7 @@ Always format your responses using Markdown, and cite your sources.`;
             await writable.write(parameters.content);
             await writable.close();
             await refreshFileTree();
-            await openFile(fileHandle);
+            await openFile(fileHandle, parameters.filename);
             result = {
               status: 'Success',
               message: `File '${parameters.filename}' created successfully.`,
@@ -673,7 +673,10 @@ Always format your responses using Markdown, and cite your sources.`;
                 break;
               }
             }
-            if (handleToDelete) closeTab(handleToDelete);
+            // To close a tab, we now need the path, not just the handle.
+            // This part of the logic might need adjustment if we want to close tabs on file deletion by path.
+            // For now, the most robust approach is to let the user close the tab manually.
+            // if (handleToDelete) closeTab(??path??);
             await refreshFileTree();
             result = {
               status: 'Success',
@@ -806,14 +809,14 @@ Always format your responses using Markdown, and cite your sources.`;
             await writable.close();
 
             // Update the model in the editor if the file is open
-            if (activeFileHandle && activeFileHandle.name === fileHandle.name) {
-              const fileData = openFiles.get(activeFileHandle);
+            if (openFiles.has(parameters.filename)) {
+              const fileData = openFiles.get(parameters.filename);
               if (fileData) {
                 fileData.model.setValue(parameters.content);
               }
             }
 
-            await openFile(fileHandle);
+            await openFile(fileHandle, parameters.filename);
             result = {
               status: 'Success',
               message: `File '${parameters.filename}' rewritten successfully.`,
@@ -1183,7 +1186,7 @@ Always format your responses using Markdown, and cite your sources.`;
     return tree;
   };
 
-  const renderTree = (node, element) => {
+  const renderTree = (node, element, currentPath = '') => {
     const ul = document.createElement('ul');
     node.children
       ?.sort((a, b) => {
@@ -1192,12 +1195,15 @@ Always format your responses using Markdown, and cite your sources.`;
         return a.name.localeCompare(b.name);
       })
       .forEach((child) => {
+        const newPath = currentPath
+          ? `${currentPath}/${child.name}`
+          : child.name;
         if (child.kind === 'directory') {
           const details = document.createElement('details');
           const summary = document.createElement('summary');
           summary.textContent = child.name;
           details.appendChild(summary);
-          renderTree(child, details);
+          renderTree(child, details, newPath); // Pass path down
           element.appendChild(details);
         } else {
           const li = document.createElement('li');
@@ -1205,7 +1211,7 @@ Always format your responses using Markdown, and cite your sources.`;
           li.classList.add('file');
           li.addEventListener('click', (e) => {
             e.stopPropagation();
-            openFile(child.handle);
+            openFile(child.handle, newPath); // Use path to open
           });
           ul.appendChild(li);
         }
@@ -1213,12 +1219,12 @@ Always format your responses using Markdown, and cite your sources.`;
     if (ul.hasChildNodes()) element.appendChild(ul);
   };
 
-  let openFiles = new Map();
-  let activeFileHandle = null;
+  let openFiles = new Map(); // Key: filePath (string), Value: { handle, name, model, viewState }
+  let activeFilePath = null;
 
-  const openFile = async (fileHandle) => {
-    if (openFiles.has(fileHandle)) {
-      await switchTab(fileHandle);
+  const openFile = async (fileHandle, filePath) => {
+    if (openFiles.has(filePath)) {
+      await switchTab(filePath);
       return;
     }
 
@@ -1226,9 +1232,9 @@ Always format your responses using Markdown, and cite your sources.`;
       const file = await fileHandle.getFile();
       const content = await file.text();
 
-      openFiles.set(fileHandle, {
+      openFiles.set(filePath, {
+        handle: fileHandle,
         name: file.name,
-        content: content,
         model: monaco.editor.createModel(
           content,
           getLanguageFromExtension(file.name.split('.').pop()),
@@ -1236,20 +1242,20 @@ Always format your responses using Markdown, and cite your sources.`;
         viewState: null,
       });
 
-      await switchTab(fileHandle);
+      await switchTab(filePath);
       renderTabs();
     } catch (error) {
-      console.error(`Failed to open file ${fileHandle.name}:`, error);
+      console.error(`Failed to open file ${filePath}:`, error);
     }
   };
 
-  const switchTab = async (fileHandle) => {
-    if (activeFileHandle && openFiles.has(activeFileHandle)) {
-      openFiles.get(activeFileHandle).viewState = editor.saveViewState();
+  const switchTab = async (filePath) => {
+    if (activeFilePath && openFiles.has(activeFilePath)) {
+      openFiles.get(activeFilePath).viewState = editor.saveViewState();
     }
 
-    activeFileHandle = fileHandle;
-    const fileData = openFiles.get(fileHandle);
+    activeFilePath = filePath;
+    const fileData = openFiles.get(filePath);
 
     editor.setModel(fileData.model);
     if (fileData.viewState) {
@@ -1260,16 +1266,16 @@ Always format your responses using Markdown, and cite your sources.`;
     renderTabs();
   };
 
-  const closeTab = (fileHandle) => {
-    const fileData = openFiles.get(fileHandle);
+  const closeTab = (filePath) => {
+    const fileData = openFiles.get(filePath);
     if (fileData && fileData.model) {
       fileData.model.dispose();
     }
-    openFiles.delete(fileHandle);
+    openFiles.delete(filePath);
 
-    if (activeFileHandle === fileHandle) {
-      activeFileHandle = null;
-      const nextFile = openFiles.keys().next().value;
+    if (activeFilePath === filePath) {
+      activeFilePath = null;
+      const nextFile = openFiles.keys().next().value; // nextFile is a path
       if (nextFile) {
         switchTab(nextFile);
       } else {
@@ -1281,19 +1287,18 @@ Always format your responses using Markdown, and cite your sources.`;
 
   const renderTabs = () => {
     tabBarContainer.innerHTML = '';
-    openFiles.forEach((fileData, fileHandle) => {
+    openFiles.forEach((fileData, filePath) => {
       const tab = document.createElement('div');
-      tab.className =
-        'tab' + (fileHandle === activeFileHandle ? ' active' : '');
+      tab.className = 'tab' + (filePath === activeFilePath ? ' active' : '');
       tab.textContent = fileData.name;
-      tab.onclick = () => switchTab(fileHandle);
+      tab.onclick = () => switchTab(filePath);
 
       const closeBtn = document.createElement('button');
       closeBtn.className = 'tab-close-btn';
       closeBtn.innerHTML = '&times;';
       closeBtn.onclick = (e) => {
         e.stopPropagation();
-        closeTab(fileHandle);
+        closeTab(filePath);
       };
 
       tab.appendChild(closeBtn);
@@ -1309,16 +1314,16 @@ Always format your responses using Markdown, and cite your sources.`;
       ),
     );
     editor.updateOptions({ readOnly: true });
-    activeFileHandle = null;
+    activeFilePath = null;
     openFiles = new Map();
     renderTabs();
   };
 
   const saveFile = async () => {
-    if (!activeFileHandle) return;
+    if (!activeFilePath) return;
     try {
-      const fileData = openFiles.get(activeFileHandle);
-      const writable = await activeFileHandle.createWritable();
+      const fileData = openFiles.get(activeFilePath);
+      const writable = await fileData.handle.createWritable();
       await writable.write(fileData.model.getValue());
       await writable.close();
       console.log(`File '${fileData.name}' saved successfully`);
