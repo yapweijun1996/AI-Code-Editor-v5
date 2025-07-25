@@ -1062,7 +1062,18 @@ Always format your responses using Markdown, and cite your sources.`;
                // UNIFIED LOGIC: On key rotation, just restart the session completely.
                // It will pick up the new key and the latest model from the UI.
                console.log('[AI Turn] Restarting session due to API key failure.');
-               const history = this.chatSession ? await this.chatSession.getHistory() : [];
+               let history = this.chatSession ? await this.chatSession.getHistory() : [];
+
+               // PRUNING LOGIC: If the last turn was a model's function call that failed,
+               // we must remove it from the history before retrying.
+               if (history.length > 0) {
+                   const lastTurn = history[history.length - 1];
+                   if (lastTurn.role === 'model' && lastTurn.parts.some(p => p.functionCall)) {
+                       console.log('[AI Turn] Pruning incomplete function call from history before retry.');
+                       history.pop(); // Remove the invalid turn
+                   }
+               }
+               
                await this._restartSessionWithHistory(history);
               
                // The loop will automatically retry with the same `promptParts`
