@@ -349,243 +349,87 @@ const toolLogContainer = document.getElementById('tool-log-container');
    rateLimit: 5000, // Default 5 seconds
 
     async _restartSessionWithHistory(history = []) {
-        console.log('Restarting session with history preservation...');
-        await this.startOrRestartChatSession(); // This creates a new session with the latest model from the UI
-        if (this.chatSession) {
-            this.chatSession.history = history;
-            console.log(`Session re-initialized with ${history.length} history parts.`);
-        }
+      console.log('Restarting session with history preservation...');
+      await this._startChat(history);
+      console.log(`Session re-initialized with ${history.length} history parts.`);
     },
 
     initialize() {
-      // This will be called to start a new chat session
+      // This method is now effectively empty as initialization happens on demand.
     },
 
-    async startOrRestartChatSession() {
-      const apiKey = ApiKeyManager.getCurrentKey();
-      if (!apiKey) {
-        this.appendMessage(
-          'Error: No API key provided. Please add one in the settings.',
-          'ai',
-        );
-        return;
+    async _startChat(history = []) {
+      try {
+        const apiKey = ApiKeyManager.getCurrentKey();
+        if (!apiKey) {
+          throw new Error('No API key provided. Please add one in the settings.');
+        }
+
+        const genAI = new window.GoogleGenerativeAI(apiKey);
+        const modelName = modelSelector.value;
+        const mode = agentModeSelector.value;
+
+        // Tool and system instruction setup (same as before)
+        const baseTools = {
+          functionDeclarations: [
+            { name: 'create_file', description: "Creates a new file. IMPORTANT: File paths must be relative to the project root. Do NOT include the root folder's name in the path. Always use get_project_structure first to check for existing files.", parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' }, content: { type: 'STRING' } }, required: ['filename', 'content'] } },
+            { name: 'delete_file', description: "Deletes a file. IMPORTANT: File paths must be relative to the project root. Do NOT include the root folder's name in the path. CRITICAL: Use get_project_structure first to ensure the file exists.", parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' } }, required: ['filename'] } },
+            { name: 'read_file', description: "Reads the content of an existing file. IMPORTANT: File paths must be relative to the project root. Do NOT include the root folder's name in the path. Always use get_project_structure first to get the correct file path.", parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' } }, required: ['filename'] } },
+            { name: 'get_open_file_content', description: 'Gets the content of the currently open file in the editor.' },
+            { name: 'get_selected_text', description: 'Gets the text currently selected by the user in the editor.' },
+            { name: 'replace_selected_text', description: 'Replaces the currently selected text in the editor with new text.', parameters: { type: 'OBJECT', properties: { new_text: { type: 'STRING' } }, required: ['new_text'] } },
+            { name: 'get_project_structure', description: 'Gets the entire file and folder structure of the project. CRITICAL: Always use this tool before attempting to read or create a file to ensure you have the correct file path.' },
+            { name: 'search_code', description: 'Searches for a specific string in all files in the project (like grep).', parameters: { type: 'OBJECT', properties: { search_term: { type: 'STRING' } }, required: ['search_term'] } },
+            { name: 'run_terminal_command', description: 'Executes a shell command on the backend and returns the output.', parameters: { type: 'OBJECT', properties: { command: { type: 'STRING' } }, required: ['command'] } },
+            { name: 'build_or_update_codebase_index', description: 'Scans the entire codebase to build a searchable index. Slow, run once per session.' },
+            { name: 'query_codebase', description: 'Searches the pre-built codebase index.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
+            { name: 'get_file_history', description: 'Retrieves the git commit history for a specific file.', parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' } }, required: ['filename'] } },
+            { name: 'rewrite_file', description: "Rewrites a file with new content. Overwrites the entire existing file content. IMPORTANT: Use for all file modifications instead of apply_diff.", parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' }, content: { type: 'STRING' } }, required: ['filename', 'content'] } },
+            { name: 'format_code', description: 'Formats a specific file using Prettier.', parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' } }, required: ['filename'] } },
+            { name: 'analyze_code', description: "Analyzes the structure of a JavaScript file (.js) using an AST parser. CRITICAL: Use this tool for analyzing JavaScript code structure. For reading other file types like HTML, CSS, or plain text, use the 'read_file' tool instead.", parameters: { type: 'OBJECT', properties: { filename: { type: 'STRING' } }, required: ['filename'] } },
+          ],
+        };
+        let allTools = [baseTools];
+        let systemInstructionText = '';
+        const now = new Date();
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const timeString = now.toLocaleString();
+        const baseCodePrompt = `You are an expert AI programmer named Gemini. Your goal is to help users with their coding tasks. You have access to a file system, a terminal, and other tools to help you. Be concise and efficient. When asked to write code, just write the code without too much explanation unless asked. When you need to modify a file, use the 'rewrite_file' tool to overwrite the entire file content. Always format your responses using Markdown. For code, use language-specific code blocks.`;
+        const basePlanPrompt = `You are a senior software architect named Gemini. Your goal is to help users plan their projects. When asked for a plan, break down the problem into clear, actionable steps. You can use mermaid syntax to create diagrams. Do not write implementation code unless specifically asked. Always format your responses using Markdown.`;
+        const baseSearchPrompt = `You are a research assistant AI. Your primary function is to use the Google Search tool to find the most accurate and up-to-date information for any user query.\n\n**CRITICAL INSTRUCTION: You MUST use the Google Search tool for ANY query that requires external information. Do not rely on your internal knowledge. First, search, then answer.**\n\nCurrent user context:\n- Current Time: ${timeString}\n- Timezone: ${timeZone}\n\nAlways format your responses using Markdown, and cite your sources.`;
+
+        if (mode === 'search') {
+          allTools.push({ googleSearch: {} });
+          systemInstructionText = baseSearchPrompt;
+        } else if (mode === 'plan') {
+          systemInstructionText = basePlanPrompt;
+        } else {
+          systemInstructionText = baseCodePrompt;
+        }
+
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: { parts: [{ text: systemInstructionText }] },
+          tools: allTools,
+        });
+
+        // CORE ARCHITECTURAL FIX: Pass the history directly into startChat.
+        this.chatSession = model.startChat({
+          history: history,
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          ],
+        });
+
+        this.activeModelName = modelName;
+        console.log(`New chat session started with model: ${modelName}, mode: ${mode}, and ${history.length} history parts.`);
+      } catch (error) {
+        console.error('Failed to start chat session:', error);
+        this.appendMessage(`Error: Could not start chat session. ${error.message}`, 'ai');
       }
-
-      const genAI = new window.GoogleGenerativeAI(apiKey);
-      const selectedMode = agentModeSelector.value;
-
-      // Define base tools available in all modes
-      const baseTools = {
-        functionDeclarations: [
-          // ... (keep all tool definitions as they are)
-          {
-            name: 'create_file',
-            description:
-              "Creates a new file. IMPORTANT: File paths must be relative to the project root. Do NOT include the root folder's name in the path. Always use get_project_structure first to check for existing files.",
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                filename: { type: 'STRING' },
-                content: { type: 'STRING' },
-              },
-              required: ['filename', 'content'],
-            },
-          },
-          {
-            name: 'delete_file',
-            description:
-              "Deletes a file. IMPORTANT: File paths must be relative to the project root. Do NOT include the root folder's name in the path. CRITICAL: Use get_project_structure first to ensure the file exists.",
-            parameters: {
-              type: 'OBJECT',
-              properties: { filename: { type: 'STRING' } },
-              required: ['filename'],
-            },
-          },
-          {
-            name: 'read_file',
-            description:
-              "Reads the content of an existing file. IMPORTANT: File paths must be relative to the project root. Do NOT include the root folder's name in the path. Always use get_project_structure first to get the correct file path.",
-            parameters: {
-              type: 'OBJECT',
-              properties: { filename: { type: 'STRING' } },
-              required: ['filename'],
-            },
-          },
-          {
-            name: 'get_open_file_content',
-            description:
-              'Gets the content of the currently open file in the editor.',
-          },
-          {
-            name: 'get_selected_text',
-            description:
-              'Gets the text currently selected by the user in the editor.',
-          },
-          {
-            name: 'replace_selected_text',
-            description:
-              'Replaces the currently selected text in the editor with new text.',
-            parameters: {
-              type: 'OBJECT',
-              properties: { new_text: { type: 'STRING' } },
-              required: ['new_text'],
-            },
-          },
-          {
-            name: 'get_project_structure',
-            description:
-              'Gets the entire file and folder structure of the project. CRITICAL: Always use this tool before attempting to read or create a file to ensure you have the correct file path.',
-          },
-          {
-            name: 'search_code',
-            description:
-              'Searches for a specific string in all files in the project (like grep).',
-            parameters: {
-              type: 'OBJECT',
-              properties: { search_term: { type: 'STRING' } },
-              required: ['search_term'],
-            },
-          },
-          {
-            name: 'run_terminal_command',
-            description:
-              'Executes a shell command on the backend and returns the output.',
-            parameters: {
-              type: 'OBJECT',
-              properties: { command: { type: 'STRING' } },
-              required: ['command'],
-            },
-          },
-          {
-            name: 'build_or_update_codebase_index',
-            description:
-              'Scans the entire codebase to build a searchable index. Slow, run once per session.',
-          },
-          {
-            name: 'query_codebase',
-            description: 'Searches the pre-built codebase index.',
-            parameters: {
-              type: 'OBJECT',
-              properties: { query: { type: 'STRING' } },
-              required: ['query'],
-            },
-          },
-          {
-            name: 'get_file_history',
-            description:
-              'Retrieves the git commit history for a specific file.',
-            parameters: {
-              type: 'OBJECT',
-              properties: { filename: { type: 'STRING' } },
-              required: ['filename'],
-            },
-          },
-          {
-            name: 'rewrite_file',
-            description: 'Rewrites a file with new content. Overwrites the entire existing file content. IMPORTANT: Use for all file modifications instead of apply_diff.',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                filename: { type: 'STRING' },
-                content: { type: 'STRING' },
-              },
-              required: ['filename', 'content'],
-            },
-          },
-          {
-            name: 'format_code',
-            description: 'Formats a specific file using Prettier.',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                filename: { type: 'STRING' },
-              },
-              required: ['filename'],
-            },
-          },
-          {
-           name: 'analyze_code',
-           description: "Analyzes the structure of a JavaScript file (.js) using an AST parser. CRITICAL: Use this tool for analyzing JavaScript code structure. For reading other file types like HTML, CSS, or plain text, use the 'read_file' tool instead.",
-           parameters: {
-             type: 'OBJECT',
-             properties: {
-               filename: { type: 'STRING' },
-             },
-             required: ['filename'],
-           },
-         },
-        ],
-      };
-
-      let allTools = [baseTools];
-      let systemInstructionText = '';
-
-      const now = new Date();
-      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const timeString = now.toLocaleString();
-
-      const baseCodePrompt = `You are an expert AI programmer named Gemini. Your goal is to help users with their coding tasks. You have access to a file system, a terminal, and other tools to help you. Be concise and efficient. When asked to write code, just write the code without too much explanation unless asked. When you need to modify a file, use the 'rewrite_file' tool to overwrite the entire file content. Always format your responses using Markdown. For code, use language-specific code blocks.`;
-      const basePlanPrompt = `You are a senior software architect named Gemini. Your goal is to help users plan their projects. When asked for a plan, break down the problem into clear, actionable steps. You can use mermaid syntax to create diagrams. Do not write implementation code unless specifically asked. Always format your responses using Markdown.`;
-      const baseSearchPrompt = `You are a research assistant AI. Your primary function is to use the Google Search tool to find the most accurate and up-to-date information for any user query.
-
-**CRITICAL INSTRUCTION: You MUST use the Google Search tool for ANY query that requires external information. Do not rely on your internal knowledge. First, search, then answer.**
-
-Current user context:
-- Current Time: ${timeString}
-- Timezone: ${timeZone}
-
-Always format your responses using Markdown, and cite your sources.`;
-
-      if (selectedMode === 'search') {
-        allTools.push({ googleSearch: {} });
-        systemInstructionText = baseSearchPrompt;
-      } else if (selectedMode === 'plan') {
-        systemInstructionText = basePlanPrompt;
-      } else {
-        systemInstructionText = baseCodePrompt;
-      }
-
-      const modelConfig = {
-        model: modelSelector.value,
-        systemInstruction: {
-          parts: [{ text: systemInstructionText }],
-        },
-        tools: allTools,
-      };
-
-      const model = genAI.getGenerativeModel(modelConfig);
-
-      this.chatSession = model.startChat({
-        history: [],
-        // The safety settings are optional, but recommended
-        safetySettings: [
-          {
-            category: 'HARM_CATEGORY_HARASSMENT',
-            threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-          },
-          {
-            category: 'HARM_CATEGORY_HATE_SPEECH',
-            threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-          },
-          {
-            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-            threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-          },
-          {
-            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-            threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-          },
-        ],
-      });
-      
-      this.activeModelName = modelSelector.value; // Store the model name used for this session
-
-      console.log(
-        'New chat session started with model:',
-        this.activeModelName,
-        'and mode:',
-        agentModeSelector.value,
-      );
     },
 
     appendMessage(text, sender, isStreaming = false) {
@@ -959,7 +803,7 @@ Always format your responses using Markdown, and cite your sources.`;
       if ((!userPrompt && !uploadedImage) || this.isSending) return;
 
       if (!this.chatSession) {
-        await this.startOrRestartChatSession();
+        await this._startChat(); // Start a fresh session if one doesn't exist
         if (!this.chatSession) return;
       }
       
@@ -1059,24 +903,11 @@ Always format your responses using Markdown, and cite your sources.`;
                );
                await new Promise(resolve => setTimeout(resolve, delay));
               
-               // UNIFIED LOGIC: On key rotation, just restart the session completely.
-               // It will pick up the new key and the latest model from the UI.
+               // CORE ARCHITECTURAL FIX: The history is now handled correctly at session start.
+               // No pruning is needed because the entire valid history will be passed
+               // to the new session, and the loop will automatically retry the failed `promptParts`.
                console.log('[AI Turn] Restarting session due to API key failure.');
-               let history = this.chatSession ? await this.chatSession.getHistory() : [];
-
-               // PRUNING LOGIC: If the last turn was a model's function call that failed,
-               // we must remove it from the history before retrying.
-               if (history.length > 0) {
-                   const lastTurn = history[history.length - 1];
-                   if (lastTurn.role === 'model' && lastTurn.parts.some(p => p.functionCall)) {
-                       console.log('[AI Turn] Pruning incomplete function call from history before retry.');
-                       history.pop(); // Remove the invalid model turn.
-
-                       // The promptParts variable is intentionally NOT modified here.
-                       // The loop will naturally retry with the last valid prompt/response,
-                       // preserving the full context for the new session.
-                   }
-               }
+               const history = this.chatSession ? await this.chatSession.getHistory() : [];
                await this._restartSessionWithHistory(history);
               
                // The loop will automatically retry with the same `promptParts`
@@ -1111,7 +942,7 @@ Always format your responses using Markdown, and cite your sources.`;
     async clearHistory() {
       chatMessages.innerHTML = '';
       this.appendMessage('Conversation history cleared.', 'ai');
-      await this.startOrRestartChatSession(); // Start a fresh session
+      await this._startChat(); // Start a fresh session
     },
   
     appendToolLog(toolName, params) {
@@ -1591,7 +1422,7 @@ Always format your responses using Markdown, and cite your sources.`;
 
   GeminiChat.initialize();
   ApiKeyManager.loadKeys().then(() => {
-    GeminiChat.startOrRestartChatSession();
+    GeminiChat._startChat();
   });
 
   saveKeysButton.addEventListener('click', () => ApiKeyManager.saveKeys());
