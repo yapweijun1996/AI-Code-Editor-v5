@@ -1064,9 +1064,11 @@ Always format your responses using Markdown, and cite your sources.`;
                    console.log(`Using cached model name: ${modelName} (type: ${typeof modelName})`);
                    
                    const genAI = new window.GoogleGenerativeAI(newApiKey);
-                   // Always use the object form for compatibility with SDK: { model: modelName }
-                   console.log(`[Retry] Updating chat session with new API key and model:`, modelName, `(type: ${typeof modelName})`);
-                   this.chatSession.model = genAI.getGenerativeModel({ model: modelName });
+                   // Always read the latest model value from the DOM to avoid using a stale one
+                   const currentModel = modelSelector.value;
+                   console.log(`[Retry] Updating chat session with new API key and model:`, currentModel, `(type: ${typeof currentModel})`);
+                   this.chatSession.model = genAI.getGenerativeModel({ model: currentModel });
+                   this.activeModelName = currentModel; // IMPORTANT: Keep our state tracker in sync
                    console.log('API key and model updated in existing chat session.');
                    console.groupEnd();
                }
