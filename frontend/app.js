@@ -491,7 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           {
            name: 'analyze_code',
-           description: 'Analyzes the structure of a JavaScript file using an AST parser. Provides a summary of functions, classes, and imports.',
+           description: "Analyzes the structure of a JavaScript file (.js) using an AST parser. CRITICAL: Use this tool for analyzing JavaScript code structure. For reading other file types like HTML, CSS, or plain text, use the 'read_file' tool instead.",
            parameters: {
              type: 'OBJECT',
              properties: {
@@ -601,8 +601,9 @@ Always format your responses using Markdown, and cite your sources.`;
     async executeTool(toolCall) {
       const toolName = toolCall.name;
       const parameters = toolCall.args;
+      console.groupCollapsed(`[Tool Call] ${toolName}`);
+      console.log('Parameters:', parameters);
       const logEntry = this.appendToolLog(toolName, parameters);
-      console.log(`[Frontend] Tool Call: ${toolName}`, parameters);
 
       let result;
       try {
@@ -837,13 +838,21 @@ Always format your responses using Markdown, and cite your sources.`;
             break;
           }
           case 'analyze_code': {
+            if (!parameters.filename.endsWith('.js')) {
+              result = {
+                status: 'Error',
+                message:
+                  'This tool can only analyze .js files. For other file types, use read_file.',
+              };
+              break;
+            }
             const fileHandle = await getFileHandleFromPath(
               rootDirectoryHandle,
               parameters.filename,
             );
             const file = await fileHandle.getFile();
             const content = await file.text();
-            
+
             const ast = acorn.parse(content, {
               ecmaVersion: 'latest',
               sourceType: 'module',
@@ -900,7 +909,8 @@ Always format your responses using Markdown, and cite your sources.`;
           message: `Error executing tool '${toolName}': ${error.message}`,
         };
       }
-      console.log(`[Frontend] Tool Result: ${toolName}`, result);
+      console.log('Result:', result);
+      console.groupEnd(); // End the tool call group
       this.updateToolLog(logEntry, true);
       return { toolResponse: { name: toolName, response: result } };
     },
@@ -947,6 +957,9 @@ Always format your responses using Markdown, and cite your sources.`;
         // Loop to handle potential multi-turn tool calls and API key rotation
         while (running && !this.isCancelled) {
           try {
+            console.groupCollapsed(
+              `[AI Turn] User Prompt: "${userPrompt.substring(0, 50)}..."`,
+            );
             console.log(
               '[DEBUG] Sending parts to model:',
               JSON.stringify(promptParts, null, 2),
@@ -1028,6 +1041,7 @@ Always format your responses using Markdown, and cite your sources.`;
         this.appendMessage(`An error occurred: ${error.message}`, 'ai');
         console.error('Chat Error:', error);
       } finally {
+        console.groupEnd();
         this.isSending = false;
         chatSendButton.style.display = 'inline-block';
         chatCancelButton.style.display = 'none';
