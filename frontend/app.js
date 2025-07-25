@@ -1038,8 +1038,15 @@ Always format your responses using Markdown, and cite your sources.`;
                );
                await new Promise(resolve => setTimeout(resolve, delay));
               
-               // Re-initialize the chat session with the new key before retrying
-               await this.startOrRestartChatSession();
+               // DO NOT re-initialize the chat session. Instead, just update the key
+               // by creating a new genAI instance and assigning it to the existing session.
+               const newApiKey = ApiKeyManager.getCurrentKey();
+               if (newApiKey) {
+                   const genAI = new window.GoogleGenerativeAI(newApiKey);
+                   this.chatSession.model = genAI.getGenerativeModel({ model: modelSelector.value });
+                    console.log('API key updated in existing chat session.');
+               }
+              
                // The loop will automatically retry with the same `promptParts`
                this.lastRequestTime = Date.now(); // Reset timer after waiting
             }
