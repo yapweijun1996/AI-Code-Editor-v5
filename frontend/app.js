@@ -1046,10 +1046,10 @@ Always format your responses using Markdown, and cite your sources.`;
                    console.log(`Using cached model name: ${modelName} (type: ${typeof modelName})`);
                    
                    const genAI = new window.GoogleGenerativeAI(newApiKey);
-                   // Use the cached modelName string, NOT the DOM element
-                   this.chatSession.model = genAI.getGenerativeModel({ model: modelName });
+                   // Use the cached modelName string directly, NOT as an object property
+                   this.chatSession.model = genAI.getGenerativeModel(modelName);
                    
-                   console.log('API key updated in existing chat session.');
+                   console.log('API key and model updated in existing chat session.');
                    console.groupEnd();
                }
               
