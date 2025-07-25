@@ -930,15 +930,16 @@ Always format your responses using Markdown, and cite your sources.`;
     async sendMessage() {
       const selectedModel = modelSelector.value;
 
-      // --- Check for Model Change and Update Session ---
+      // --- Check for Model Change and RESTART Session ---
       if (this.chatSession && this.activeModelName !== selectedModel) {
-        console.log(`Model changed from '${this.activeModelName}' to '${selectedModel}'. Updating session.`);
-        const apiKey = ApiKeyManager.getCurrentKey();
-        if (apiKey) {
-          const genAI = new window.GoogleGenerativeAI(apiKey);
-          this.chatSession.model = genAI.getGenerativeModel({ model: selectedModel });
-          this.activeModelName = selectedModel; // Update our record of the active model
-          console.log('Chat session model updated successfully without losing history.');
+        console.log(`Model changed from '${this.activeModelName}' to '${selectedModel}'. Re-initializing session while preserving history.`);
+        
+        // Preserve history, restart the session, and then inject the history back.
+        const history = await this.chatSession.getHistory();
+        await this.startOrRestartChatSession(); // This will create a new session with the new model
+        if(this.chatSession) {
+          this.chatSession.history = history;
+          console.log('Session re-initialized and history preserved.');
         }
       }
       // --- End of Model Change Check ---
