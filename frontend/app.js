@@ -489,6 +489,17 @@ document.addEventListener('DOMContentLoaded', () => {
               required: ['filename'],
             },
           },
+          {
+           name: 'analyze_code',
+           description: 'Analyzes the structure of a JavaScript file using an AST parser. Provides a summary of functions, classes, and imports.',
+           parameters: {
+             type: 'OBJECT',
+             properties: {
+               filename: { type: 'STRING' },
+             },
+             required: ['filename'],
+           },
+         },
         ],
       };
 
@@ -822,6 +833,57 @@ Always format your responses using Markdown, and cite your sources.`;
             result = {
               status: 'Success',
               message: `Formatting request for '${parameters.filename}' sent to the worker.`,
+            };
+            break;
+          }
+          case 'analyze_code': {
+            const fileHandle = await getFileHandleFromPath(
+              rootDirectoryHandle,
+              parameters.filename,
+            );
+            const file = await fileHandle.getFile();
+            const content = await file.text();
+            
+            const ast = acorn.parse(content, {
+              ecmaVersion: 'latest',
+              sourceType: 'module',
+              locations: true,
+            });
+
+            const analysis = {
+              functions: [],
+              classes: [],
+              imports: [],
+            };
+
+            acorn.walk.simple(ast, {
+              FunctionDeclaration(node) {
+                analysis.functions.push({
+                  name: node.id.name,
+                  start: node.loc.start.line,
+                  end: node.loc.end.line,
+                });
+              },
+              ClassDeclaration(node) {
+                analysis.classes.push({
+                  name: node.id.name,
+                  start: node.loc.start.line,
+                  end: node.loc.end.line,
+                });
+              },
+              ImportDeclaration(node) {
+                analysis.imports.push({
+                  source: node.source.value,
+                  specifiers: node.specifiers.map(
+                    (s) => s.local.name,
+                  ),
+                });
+              },
+            });
+
+            result = {
+              status: 'Success',
+              analysis: analysis,
             };
             break;
           }
