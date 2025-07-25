@@ -1070,10 +1070,16 @@ Always format your responses using Markdown, and cite your sources.`;
                    const lastTurn = history[history.length - 1];
                    if (lastTurn.role === 'model' && lastTurn.parts.some(p => p.functionCall)) {
                        console.log('[AI Turn] Pruning incomplete function call from history before retry.');
-                       history.pop(); // Remove the invalid turn
+                       history.pop(); // Remove the invalid model turn.
+
+                       // CRITICAL: Find the last user message to rewind the prompt.
+                       const lastUserTurn = history.filter(turn => turn.role === 'user').pop();
+                       if (lastUserTurn) {
+                            console.log('[AI Turn] Rewinding prompt to last user message.');
+                            promptParts = lastUserTurn.parts;
+                       }
                    }
                }
-               
                await this._restartSessionWithHistory(history);
               
                // The loop will automatically retry with the same `promptParts`
