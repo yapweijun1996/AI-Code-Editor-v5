@@ -977,13 +977,13 @@ Always format your responses using Markdown, and cite your sources.`;
 
         // Loop to handle potential multi-turn tool calls and API key rotation
         while (running && !this.isCancelled) {
-          const modelName = modelSelector.value; // Cache the model name at the start of the loop
+          const modelName = modelSelector.value; // Always capture latest value before each attempt
           try {
             // This is the main conversation loop.
             // It will attempt to send the message and handle tool calls.
             // If an API key fails, the outer catch block will handle rotation.
             console.log(
-              `[AI Turn] Attempting to send with key index: ${ApiKeyManager.currentIndex} using model: ${modelName}`,
+              `[AI Turn] Attempting to send with key index: ${ApiKeyManager.currentIndex} using model: ${modelName} (type: ${typeof modelName})`,
             );
             const result = await this.chatSession.sendMessageStream(promptParts);
 
@@ -1046,9 +1046,9 @@ Always format your responses using Markdown, and cite your sources.`;
                    console.log(`Using cached model name: ${modelName} (type: ${typeof modelName})`);
                    
                    const genAI = new window.GoogleGenerativeAI(newApiKey);
-                   // Use the cached modelName string directly, NOT as an object property
-                   this.chatSession.model = genAI.getGenerativeModel(modelName);
-                   
+                   // Always use the object form for compatibility with SDK: { model: modelName }
+                   console.log(`[Retry] Updating chat session with new API key and model:`, modelName, `(type: ${typeof modelName})`);
+                   this.chatSession.model = genAI.getGenerativeModel({ model: modelName });
                    console.log('API key and model updated in existing chat session.');
                    console.groupEnd();
                }
