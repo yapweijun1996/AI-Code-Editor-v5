@@ -1664,3 +1664,13 @@ Always format your responses using Markdown, and cite your sources.`;
     updateImagePreview();
   }
 });
+
+
+  // --- Tab Bar Mouse Wheel Scrolling ---
+  const tabBar = document.getElementById('tab-bar');
+  tabBar.addEventListener('wheel', (event) => {
+    if (event.deltaY !== 0) {
+      event.preventDefault();
+      tabBar.scrollLeft += event.deltaY;
+    }
+  });
