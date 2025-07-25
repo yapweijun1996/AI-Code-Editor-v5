@@ -25,6 +25,7 @@ The editor's architecture has been streamlined to use a local Node.js server, si
 *   **Multimodal Input**: The AI chat supports both text and image uploads, allowing you to ask questions about visual content.
 *   **Multiple Agent Modes**: Switch between different AI modes (`Code`, `Plan`, `Search`) to tailor the agent's behavior to your specific needs.
 *   **Automatic File Opening**: When the AI agent reads, creates, or rewrites a file, it will automatically be opened in a new tab, providing immediate visibility into the agent's actions.
+*   **AST-Powered Code Analysis**: The AI can parse JavaScript code into an Abstract Syntax Tree (AST), enabling a deep, structural understanding of the code for more precise refactoring and analysis.
 
 ---
 
@@ -81,10 +82,16 @@ sequenceDiagram
 
     User->>Frontend (Browser): Submits a prompt
     Frontend (Browser)->>AI Agent (Gemini): Sends prompt for processing
-    AI Agent (Gemini)-->>Frontend (Browser): Requests tool call (e.g., read_file)
-    Frontend (Browser)->>File System API: Executes tool (reads file)
-    File System API-->>Frontend (Browser): Returns file content
-    Frontend (Browser)->>AI Agent (Gemini): Sends tool result
+    alt AST-Powered Analysis
+        AI Agent (Gemini)-->>Frontend (Browser): Requests tool call (analyze_code)
+        Frontend (Browser)->>Frontend (Browser): Executes tool (parses AST)
+        Frontend (Browser)-->>AI Agent (Gemini): Sends analysis result
+    else Standard File Operation
+        AI Agent (Gemini)-->>Frontend (Browser): Requests tool call (e.g., read_file)
+        Frontend (Browser)->>File System API: Executes tool (reads file)
+        File System API-->>Frontend (Browser): Returns file content
+        Frontend (Browser)->>AI Agent (Gemini): Sends tool result
+    end
     AI Agent (Gemini)-->>Frontend (Browser): Sends final answer
     Frontend (Browser)-->>User: Displays final answer
 ```

@@ -24,6 +24,36 @@ The editor features a stateful AI agent powered by the **Google Gemini API** (`v
 4.  **Function Response**: The result is sent back to the AI in a formal `functionResponse`.
 5.  **Final Answer**: The AI provides a natural-language response to the user.
 
+A key enhancement to this loop is the introduction of the `analyze_code` tool, which allows the AI to develop a structural understanding of the code.
+
+#### AST-Powered Workflow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend (Browser)
+    participant AI Agent (Gemini)
+    participant Acorn (AST Parser)
+
+    User->>Frontend (Browser): "Refactor the 'getUser' function"
+    Frontend (Browser)->>AI Agent (Gemini): Sends prompt
+    
+    AI Agent (Gemini)-->>Frontend (Browser): Request tool call: analyze_code('app.js')
+    
+    Frontend (Browser)->>Acorn (AST Parser): Parses content of app.js
+    Acorn (AST Parser)-->>Frontend (Browser): Returns AST
+    
+    Frontend (Browser)->>Frontend (Browser): Extracts functions, classes, etc.
+    Frontend (Browser)-->>AI Agent (Gemini): Sends analysis result
+    
+    AI Agent (Gemini)-->>Frontend (Browser): Request tool call: rewrite_file(...)
+    Frontend (Browser)->>Frontend (Browser): Executes file rewrite
+    Frontend (Browser)-->>AI Agent (Gemini): Sends success message
+    
+    AI Agent (Gemini)-->>Frontend (Browser): "I have refactored the function."
+    Frontend (Browser)-->>User: Displays final answer
+```
+
 ---
 
 ### Setup and Management
