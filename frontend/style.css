@@ -350,6 +350,18 @@ body.resizing {
   margin: 5px 0;
   box-sizing: border-box;
 }
+#rate-limiter-setting {
+ margin-top: 10px;
+ display: flex;
+ align-items: center;
+ gap: 10px;
+}
+#rate-limiter-setting label {
+ font-size: 0.9em;
+}
+#rate-limit-input {
+ width: 60px;
+}
 #image-upload-button {
   padding: 8px;
   border: none;

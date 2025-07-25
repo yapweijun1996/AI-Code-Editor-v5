@@ -26,9 +26,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const imagePreviewContainer = document.getElementById(
     'image-preview-container',
   );
+const rateLimitSlider = document.getElementById('rate-limit-slider');
+const rateLimitInput = document.getElementById('rate-limit-input');
 
-  // --- Tool Log Elements ---
-  const toolLogContainer = document.getElementById('tool-log-container');
+// --- Tool Log Elements ---
+const toolLogContainer = document.getElementById('tool-log-container');
   const toolLogMessages = document.getElementById('tool-log-messages');
   const toolLogHeader = document.querySelector('.tool-log-header');
   // --- State for multimodal input ---
@@ -342,6 +344,8 @@ document.addEventListener('DOMContentLoaded', () => {
     isCancelled: false,
     abortController: null,
     chatSession: null,
+   lastRequestTime: 0,
+   rateLimit: 5000, // Default 5 seconds
 
     initialize() {
       // This will be called to start a new chat session
@@ -921,6 +925,16 @@ Always format your responses using Markdown, and cite your sources.`;
     },
 
     async sendMessage() {
+     const now = Date.now();
+     const timeSinceLastRequest = now - this.lastRequestTime;
+     const rateLimitMs = this.rateLimit;
+
+     if (timeSinceLastRequest < rateLimitMs) {
+       const delay = rateLimitMs - timeSinceLastRequest;
+       this.appendMessage(`Rate limit active. Waiting for ${Math.ceil(delay / 1000)}s...`, 'ai');
+       await new Promise(resolve => setTimeout(resolve, delay));
+     }
+
       const userPrompt = chatInput.value.trim();
       if ((!userPrompt && !uploadedImage) || this.isSending) return;
 
@@ -928,6 +942,8 @@ Always format your responses using Markdown, and cite your sources.`;
         await this.startOrRestartChatSession();
         if (!this.chatSession) return;
       }
+      
+      this.lastRequestTime = Date.now();
 
       this.isSending = true;
       this.isCancelled = false;
@@ -1523,6 +1539,13 @@ Always format your responses using Markdown, and cite your sources.`;
   // --- Initialize Application ---
   initResizablePanels();
   tryRestoreDirectory();
+ 
+ // Load rate limit settings before initializing chat
+   const savedRateLimit = localStorage.getItem('rateLimitValue') || '5';
+   rateLimitSlider.value = savedRateLimit;
+   rateLimitInput.value = savedRateLimit;
+   GeminiChat.rateLimit = parseInt(savedRateLimit, 10) * 1000;
+
   GeminiChat.initialize();
   ApiKeyManager.loadKeys().then(() => {
     GeminiChat.startOrRestartChatSession();
@@ -1531,6 +1554,19 @@ Always format your responses using Markdown, and cite your sources.`;
   saveKeysButton.addEventListener('click', () => ApiKeyManager.saveKeys());
   chatSendButton.addEventListener('click', () => GeminiChat.sendMessage());
   chatCancelButton.addEventListener('click', () => GeminiChat.cancelMessage());
+
+ // Rate Limiter Listeners
+ rateLimitSlider.addEventListener('input', () => {
+   rateLimitInput.value = rateLimitSlider.value;
+   GeminiChat.rateLimit = parseInt(rateLimitSlider.value, 10) * 1000;
+   localStorage.setItem('rateLimitValue', rateLimitSlider.value);
+ });
+
+ rateLimitInput.addEventListener('input', () => {
+   rateLimitSlider.value = rateLimitInput.value;
+    GeminiChat.rateLimit = parseInt(rateLimitInput.value, 10) * 1000;
+    localStorage.setItem('rateLimitValue', rateLimitInput.value);
+ });
 
   toolLogHeader.addEventListener('click', () => {
     toolLogContainer.classList.toggle('collapsed');

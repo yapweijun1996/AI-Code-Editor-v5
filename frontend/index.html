@@ -87,6 +87,11 @@
             id="api-keys-textarea"
             placeholder="Enter API keys here..."
           ></textarea>
+          <div id="rate-limiter-setting">
+            <label for="rate-limit-slider">Request Delay (seconds):</label>
+            <input type="range" id="rate-limit-slider" min="0" max="300" value="5" />
+            <input type="number" id="rate-limit-input" min="0" max="300" value="5" />
+          </div>
           <button id="save-keys-button">Save Keys</button>
         </details>
       </div>
