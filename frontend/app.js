@@ -1031,13 +1031,17 @@ Always format your responses using Markdown, and cite your sources.`;
               console.error('All available API keys have failed.');
               running = false; // Stop the loop
             } else {
-              this.appendMessage(
-                `API key failed. Rotating to the next key...`,
-                'ai',
-              );
-              // Re-initialize the chat session with the new key before retrying
-              await this.startOrRestartChatSession();
-              // The loop will automatically retry with the same `promptParts`
+               const delay = this.rateLimit;
+               this.appendMessage(
+                   `API key failed. Waiting for ${Math.ceil(delay / 1000)}s before retrying with the next key...`,
+                   'ai',
+               );
+               await new Promise(resolve => setTimeout(resolve, delay));
+              
+               // Re-initialize the chat session with the new key before retrying
+               await this.startOrRestartChatSession();
+               // The loop will automatically retry with the same `promptParts`
+               this.lastRequestTime = Date.now(); // Reset timer after waiting
             }
           }
         }
