@@ -344,6 +344,7 @@ const toolLogContainer = document.getElementById('tool-log-container');
     isCancelled: false,
     abortController: null,
     chatSession: null,
+    activeModelName: '', // To track the model used by the current session
    lastRequestTime: 0,
    rateLimit: 5000, // Default 5 seconds
 
@@ -567,10 +568,12 @@ Always format your responses using Markdown, and cite your sources.`;
           },
         ],
       });
+      
+      this.activeModelName = modelSelector.value; // Store the model name used for this session
 
       console.log(
         'New chat session started with model:',
-        modelSelector.value,
+        this.activeModelName,
         'and mode:',
         agentModeSelector.value,
       );
@@ -925,6 +928,21 @@ Always format your responses using Markdown, and cite your sources.`;
     },
 
     async sendMessage() {
+      const selectedModel = modelSelector.value;
+
+      // --- Check for Model Change and Update Session ---
+      if (this.chatSession && this.activeModelName !== selectedModel) {
+        console.log(`Model changed from '${this.activeModelName}' to '${selectedModel}'. Updating session.`);
+        const apiKey = ApiKeyManager.getCurrentKey();
+        if (apiKey) {
+          const genAI = new window.GoogleGenerativeAI(apiKey);
+          this.chatSession.model = genAI.getGenerativeModel({ model: selectedModel });
+          this.activeModelName = selectedModel; // Update our record of the active model
+          console.log('Chat session model updated successfully without losing history.');
+        }
+      }
+      // --- End of Model Change Check ---
+
      const now = Date.now();
      const timeSinceLastRequest = now - this.lastRequestTime;
      const rateLimitMs = this.rateLimit;
