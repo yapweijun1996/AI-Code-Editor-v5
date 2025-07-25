@@ -23,7 +23,7 @@ The editor's architecture has been streamlined to use a local Node.js server, si
 *   **Resizable Panels**: A flexible UI with resizable panels for the file tree, editor, and AI chat.
 *   **Intelligent Tab Management**: Open, close, and switch between multiple files. The system is smart enough to recognize already-open files and simply switch to the correct tab instead of creating duplicates.
 *   **Automatic File Opening**: When the AI agent reads, creates, or rewrites a file, it is automatically opened or focused, providing immediate visibility into the agent's actions.
-*   **AST-Powered Code Analysis**: The AI can parse JavaScript code into an Abstract Syntax Tree (AST), enabling a deep, structural understanding of the code for more precise refactoring and analysis.
+*   **AST-Powered Code Analysis**: The AI can use the `analyze_code` tool to parse JavaScript code into an Abstract Syntax Tree (AST), enabling a deep, structural understanding of the code for more precise refactoring and analysis.
 *   **Multimodal Input**: The AI chat supports both text and image uploads, allowing you to ask questions about visual content.
 *   **Multiple Agent Modes**: Switch between different AI modes (`Code`, `Plan`, `Search`) to tailor the agent's behavior to your specific needs.
 
