@@ -26,7 +26,17 @@ The editor features a stateful AI agent powered by the **Google Gemini API** (`v
 
 A key enhancement to this loop is the introduction of the `analyze_code` tool, which allows the AI to develop a structural understanding of the code.
 
-#### AST-Powered Workflow
+---
+
+### Key Features and Workflow
+
+#### Intelligent Tab and File Management
+The editor's file management system is designed to be both robust and intuitive.
+*   **Path-Based Identification**: Open files are tracked by their unique file path, which prevents the creation of duplicate tabs when a file is accessed multiple times.
+*   **Automatic Focus**: When the AI uses a tool like `read_file` or `rewrite_file`, the application automatically opens the relevant file or switches to its existing tab, providing a seamless workflow.
+*   **Stateful UI**: The file tree and open tabs are rendered dynamically, providing a clear and consistent view of the project state.
+
+#### AST-Powered Code Analysis Workflow
 
 ```mermaid
 sequenceDiagram
