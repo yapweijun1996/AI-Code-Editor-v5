@@ -977,12 +977,13 @@ Always format your responses using Markdown, and cite your sources.`;
 
         // Loop to handle potential multi-turn tool calls and API key rotation
         while (running && !this.isCancelled) {
+          const modelName = modelSelector.value; // Cache the model name at the start of the loop
           try {
             // This is the main conversation loop.
             // It will attempt to send the message and handle tool calls.
             // If an API key fails, the outer catch block will handle rotation.
             console.log(
-              `[AI Turn] Attempting to send with key index: ${ApiKeyManager.currentIndex}`,
+              `[AI Turn] Attempting to send with key index: ${ApiKeyManager.currentIndex} using model: ${modelName}`,
             );
             const result = await this.chatSession.sendMessageStream(promptParts);
 
@@ -1038,13 +1039,18 @@ Always format your responses using Markdown, and cite your sources.`;
                );
                await new Promise(resolve => setTimeout(resolve, delay));
               
-               // DO NOT re-initialize the chat session. Instead, just update the key
-               // by creating a new genAI instance and assigning it to the existing session.
                const newApiKey = ApiKeyManager.getCurrentKey();
                if (newApiKey) {
+                   console.groupCollapsed('[AI Turn] Rotating API Key');
+                   console.log(`New API Key Index: ${ApiKeyManager.currentIndex}`);
+                   console.log(`Using cached model name: ${modelName} (type: ${typeof modelName})`);
+                   
                    const genAI = new window.GoogleGenerativeAI(newApiKey);
-                   this.chatSession.model = genAI.getGenerativeModel({ model: modelSelector.value });
-                    console.log('API key updated in existing chat session.');
+                   // Use the cached modelName string, NOT the DOM element
+                   this.chatSession.model = genAI.getGenerativeModel({ model: modelName });
+                   
+                   console.log('API key updated in existing chat session.');
+                   console.groupEnd();
                }
               
                // The loop will automatically retry with the same `promptParts`
