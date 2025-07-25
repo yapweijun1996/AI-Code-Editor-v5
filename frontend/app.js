@@ -601,8 +601,10 @@ Always format your responses using Markdown, and cite your sources.`;
     async executeTool(toolCall) {
       const toolName = toolCall.name;
       const parameters = toolCall.args;
-      console.groupCollapsed(`[Tool Call] ${toolName}`);
-      console.log('Parameters:', parameters);
+      // Create a more descriptive and useful log group for each tool call
+      const groupTitle = `AI Tool Call: ${toolName}`;
+      const groupContent = parameters && Object.keys(parameters).length > 0 ? parameters : 'No parameters';
+      console.groupCollapsed(groupTitle, groupContent);
       const logEntry = this.appendToolLog(toolName, parameters);
 
       let result;
@@ -960,52 +962,38 @@ Always format your responses using Markdown, and cite your sources.`;
         // Loop to handle potential multi-turn tool calls and API key rotation
         while (running && !this.isCancelled) {
           try {
-            console.groupCollapsed(
-              `[AI Turn] User Prompt: "${userPrompt.substring(0, 50)}..."`,
-            );
+            // This is the main conversation loop.
+            // It will attempt to send the message and handle tool calls.
+            // If an API key fails, the outer catch block will handle rotation.
             console.log(
-              '[DEBUG] Sending parts to model:',
-              JSON.stringify(promptParts, null, 2),
+              `[AI Turn] Attempting to send with key index: ${ApiKeyManager.currentIndex}`,
             );
             const result = await this.chatSession.sendMessageStream(promptParts);
 
             let fullResponseText = '';
             let functionCalls = [];
 
-            // Process the stream for text and function calls
-            console.log('[DEBUG] Waiting for stream to process...');
             for await (const chunk of result.stream) {
               if (this.isCancelled) break;
-
-              // Aggregate text
               const chunkText = chunk.text();
               if (chunkText) {
                 fullResponseText += chunkText;
                 this.appendMessage(fullResponseText, 'ai', true);
               }
-
-              // Aggregate function calls
               const chunkFunctionCalls = chunk.functionCalls();
               if (chunkFunctionCalls) {
                 functionCalls.push(...chunkFunctionCalls);
               }
             }
-            console.log('[DEBUG] Stream finished.');
 
             if (this.isCancelled) break;
 
+            // If there are tool calls, execute them and continue the loop
             if (functionCalls.length > 0) {
-              console.log('[DEBUG] Function calls detected:', functionCalls);
-              this.appendMessage('AI is using tools...', 'ai');
-
               const toolPromises = functionCalls.map((call) =>
                 this.executeTool(call),
               );
               const toolResults = await Promise.all(toolPromises);
-
-              console.log('[DEBUG] Tool execution results:', toolResults);
-
-              // Prepare the next message with tool results
               promptParts = toolResults.map((toolResult) => ({
                 functionResponse: {
                   name: toolResult.toolResponse.name,
@@ -1013,26 +1001,27 @@ Always format your responses using Markdown, and cite your sources.`;
                 },
               }));
             } else {
-              console.log(
-                '[DEBUG] No function calls. Conversation is over for this turn.',
-              );
               running = false; // No more tool calls, exit the loop
             }
           } catch (error) {
-            console.error('Chat Error in loop:', error);
-            if (
-              error.message.includes('429') &&
-              !ApiKeyManager.hasTriedAllKeys()
-            ) {
+            console.error('An error occurred during the AI turn:', error);
+            ApiKeyManager.rotateKey(); // Move to the next key
+
+            if (ApiKeyManager.hasTriedAllKeys()) {
+              this.appendMessage(
+                'All API keys failed. Please check your keys in the settings.',
+                'ai',
+              );
+              console.error('All available API keys have failed.');
+              running = false; // Stop the loop
+            } else {
               this.appendMessage(
                 `API key failed. Rotating to the next key...`,
                 'ai',
               );
-              ApiKeyManager.rotateKey();
-              await this.startOrRestartChatSession(); // Re-initialize with new key
-              // The loop will continue with the same promptParts
-            } else {
-              throw error; // Re-throw if it's not a 429 or all keys are tried
+              // Re-initialize the chat session with the new key before retrying
+              await this.startOrRestartChatSession();
+              // The loop will automatically retry with the same `promptParts`
             }
           }
         }
